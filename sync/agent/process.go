@@ -78,6 +78,7 @@ func (s *Server) GetProcess(rw http.ResponseWriter, req *http.Request) error {
 
 func (s *Server) CreateProcess(rw http.ResponseWriter, req *http.Request) error {
 	var p Process
+	gotNextPort := false
 	apiContext := api.GetApiContext(req)
 	if err := apiContext.Read(&p); err != nil {
 		return err
@@ -92,6 +93,7 @@ func (s *Server) CreateProcess(rw http.ResponseWriter, req *http.Request) error 
 			s.Unlock()
 			return err
 		}
+		gotNextPort = true
 	}
 
 	s.processCounter++
@@ -99,8 +101,18 @@ func (s *Server) CreateProcess(rw http.ResponseWriter, req *http.Request) error 
 	p.Id = id
 	p.Type = "process"
 	s.processes[p.Id] = &p
-	s.processesByPort[p.Port] = &p
 
+	//It makes sense to add to map only if listener is created
+	//Adding otherwise can cause 'bind port failed' issue in below case:
+	//Consider listener is created on port 9759, and, due to reason that
+	//ssync client is crashed, that ssync server process is just staying.
+	//During this time, if another replica have listener on 9759 and asked this
+	//replica to help in rebuilding, can make this entry go off if added to map.
+	//Later, this entry again can get alloted and can cause 'bind port failed',
+	//as ssync server still exists.
+	if gotNextPort == true {
+		s.processesByPort[p.Port] = &p
+	}
 	s.Unlock()
 
 	p.ExitCode = -2
@@ -109,7 +121,9 @@ func (s *Server) CreateProcess(rw http.ResponseWriter, req *http.Request) error 
 			logrus.Errorf("Failed to launch %#v: %v", p, err)
 		}
 		s.Lock()
-		delete(s.processesByPort, p.Port)
+		if gotNextPort == true {
+			delete(s.processesByPort, p.Port)
+		}
 		s.Unlock()
 	}()
 
