@@ -12,9 +12,12 @@ import (
 func (s *Server) ListReplicas(rw http.ResponseWriter, req *http.Request) error {
 	apiContext := api.GetApiContext(req)
 	resp := client.GenericCollection{}
+
+	s.c.Lock()
 	for _, r := range s.c.ListReplicas() {
 		resp.Data = append(resp.Data, NewReplica(apiContext, r.Address, r.Mode))
 	}
+	s.c.Unlock()
 
 	resp.ResourceType = "replica"
 	resp.CreateTypes = map[string]string{
@@ -34,7 +37,13 @@ func (s *Server) GetReplica(rw http.ResponseWriter, req *http.Request) error {
 		return nil
 	}
 
-	apiContext.Write(s.getReplica(apiContext, id))
+	r := s.getReplica(apiContext, id)
+	if r == nil {
+		rw.WriteHeader(http.StatusNotFound)
+		return nil
+	}
+
+	apiContext.Write(r)
 	return nil
 }
 
@@ -49,11 +58,19 @@ func (s *Server) CreateReplica(rw http.ResponseWriter, req *http.Request) error 
 		return err
 	}
 
-	apiContext.Write(s.getReplica(apiContext, replica.Address))
+	r := s.getReplica(apiContext, replica.Address)
+	if r == nil {
+		rw.WriteHeader(http.StatusNotFound)
+		return nil
+	}
+
+	apiContext.Write(r)
 	return nil
 }
 
 func (s *Server) getReplica(context *api.ApiContext, id string) *Replica {
+	s.c.Lock()
+	defer s.c.Unlock()
 	for _, r := range s.c.ListReplicas() {
 		if r.Address == id {
 			return NewReplica(context, r.Address, r.Mode)

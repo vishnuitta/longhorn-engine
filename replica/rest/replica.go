@@ -21,6 +21,8 @@ func (s *Server) ListReplicas(rw http.ResponseWriter, req *http.Request) error {
 }
 
 func (s *Server) Replica(apiContext *api.ApiContext) *Replica {
+	s.s.RLock()
+	defer s.s.RUnlock()
 	state, info := s.s.Status()
 	return NewReplica(apiContext, state, info, s.s.Replica())
 }
