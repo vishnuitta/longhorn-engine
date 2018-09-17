@@ -193,6 +193,14 @@ func (s *Server) launchSync(p *Process) error {
 	if p.Host != "" {
 		args = append(args, "-host", p.Host)
 	}
+
+	//Changing timeout of 120 secs to 7 seconds for ssync client to retry
+	//to open file on ssync server.
+	//When the ssync server restarts and opens listener on same port that
+	//ssync client is trying to connect for 120 seconds, it can cause corruption
+	//or unwanted results as client and server are considering different files.
+	args = append(args, "-timeout", strconv.Itoa(7))
+
 	if p.Port != 0 {
 		args = append(args, "-port", strconv.Itoa(p.Port))
 	}
